@@ -12,8 +12,12 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("sotek <sotek72@gmail.com>");
 MODULE_DESCRIPTION("A Simple Hello World module");
 
+
+
 static int __init hello_init(void)
 {
+	//list_del_init(&__this_module.list);
+	//kobject_del(&THIS_MODULE->mkobj.kobj);
     printk(KERN_INFO "Hello world!\n");
     return 0;    // Non-zero return means that the module couldn't be loaded.
 }
@@ -25,3 +29,6 @@ static void __exit hello_cleanup(void)
 
 module_init(hello_init);
 module_exit(hello_cleanup);
+
+
+
