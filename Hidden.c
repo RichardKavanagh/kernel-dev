@@ -5,11 +5,11 @@
 #if defined(__i386__)
 #define START_CHECK 0xc0000000
 #define END_CHECK 0xd0000000
-typedef unsigned int psize;
+typedef unsigned int pointer_size;
 #else
 #define START_CHECK 0xffffffff81000000
 #define END_CHECK 0xffffffffa2000000
-typedef unsigned long psize;
+typedef unsigned long pointer_size;
 #endif
  
  
