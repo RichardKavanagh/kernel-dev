@@ -1,4 +1,4 @@
-Obj-m := hello_world.o
+Obj-m := hidden.o
 KERNEL_DIR = /lib/modules/$(shell uname -r)/build
 PWD = $(shell PWD)
 all:

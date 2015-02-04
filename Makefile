@@ -1,4 +1,4 @@
-obj-m += hello_world.o
+obj-m += hidden.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
